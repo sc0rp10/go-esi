@@ -59,7 +59,14 @@ func (i *includeTag) loadAttributes(b []byte) error {
 }
 
 func sanitizeURL(u string, reqURL *url.URL) string {
-	parsed, _ := url.Parse(u)
+	parsed, err := url.Parse(u)
+	if err != nil || parsed == nil {
+		return u
+	}
+
+	if reqURL == nil {
+		return parsed.String()
+	}
 
 	return reqURL.ResolveReference(parsed).String()
 }
@@ -140,4 +147,58 @@ func (*includeTag) GetClosePosition(b []byte) int {
 	}
 
 	return 0
+}
+
+// FetchContent fetches the include content without processing the document replacement.
+// This is used for parallel fetching.
+func (i *includeTag) FetchContent(b []byte, req *http.Request) []byte {
+	closeIdx := closeInclude.FindIndex(b)
+
+	if closeIdx == nil {
+		return nil
+	}
+
+	i.length = closeIdx[1]
+	if e := i.loadAttributes(b[8:i.length]); e != nil {
+		return nil
+	}
+
+	rq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, sanitizeURL(i.src, req.URL), nil)
+	addHeaders(headersSafe, req, rq)
+
+	if rq.URL.Scheme == req.URL.Scheme && rq.URL.Host == req.URL.Host {
+		addHeaders(headersUnsafe, req, rq)
+	}
+
+	client := &http.Client{}
+	response, err := client.Do(rq)
+	newReq := rq
+
+	if (err != nil || response.StatusCode >= 400) && i.alt != "" {
+		rq, _ = http.NewRequestWithContext(context.Background(), http.MethodGet, sanitizeURL(i.alt, req.URL), nil)
+		addHeaders(headersSafe, req, rq)
+
+		if rq.URL.Scheme == req.URL.Scheme && rq.URL.Host == req.URL.Host {
+			addHeaders(headersUnsafe, req, rq)
+		}
+
+		response, err = client.Do(rq)
+		newReq = rq
+
+		if !i.silent && (err != nil || response.StatusCode >= 400) {
+			return nil
+		}
+	}
+
+	if response == nil {
+		return nil
+	}
+
+	var buf bytes.Buffer
+
+	defer response.Body.Close()
+	_, _ = io.Copy(&buf, response.Body)
+
+	// Recursively parse nested ESI tags using the request from the fetched resource
+	return Parse(buf.Bytes(), newReq)
 }

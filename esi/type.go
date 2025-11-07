@@ -14,6 +14,18 @@ type (
 	baseTag struct {
 		length int
 	}
+
+	includeRequest struct {
+		tag      *includeTag
+		position int
+		length   int
+	}
+
+	includeResult struct {
+		content  []byte
+		position int
+		length   int
+	}
 )
 
 func newBaseTag() *baseTag {
