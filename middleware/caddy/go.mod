@@ -137,4 +137,4 @@ require (
 	howett.net/plist v1.0.0 // indirect
 )
 
-replace github.com/darkweak/go-esi v0.0.6 => ../..
+replace github.com/darkweak/go-esi => ../..

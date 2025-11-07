@@ -16,7 +16,19 @@ var (
 	srcAttribute     = regexp.MustCompile(`src="?(.+?)"?( |/>)`)
 	altAttribute     = regexp.MustCompile(`alt="?(.+?)"?( |/>)`)
 	onErrorAttribute = regexp.MustCompile(`onerror="?(.+?)"?( |/>)`)
+
+	// HTTP client with increased connection pool for parallel ESI fetching
+	httpClient = createHTTPClient()
 )
+
+func createHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 100, // Allow many parallel connections
+			MaxConnsPerHost:     100,
+		},
+	}
+}
 
 // safe to pass to any origin.
 var headersSafe = []string{
@@ -103,8 +115,7 @@ func (i *includeTag) Process(b []byte, req *http.Request) ([]byte, int) {
 		addHeaders(headersUnsafe, req, rq)
 	}
 
-	client := &http.Client{}
-	response, err := client.Do(rq)
+	response, err := httpClient.Do(rq)
 	req = rq
 
 	if (err != nil || response.StatusCode >= 400) && i.alt != "" {
@@ -115,7 +126,7 @@ func (i *includeTag) Process(b []byte, req *http.Request) ([]byte, int) {
 			addHeaders(headersUnsafe, req, rq)
 		}
 
-		response, err = client.Do(rq)
+		response, err = httpClient.Do(rq)
 		req = rq
 
 		if !i.silent && (err != nil || response.StatusCode >= 400) {
@@ -170,8 +181,7 @@ func (i *includeTag) FetchContent(b []byte, req *http.Request) []byte {
 		addHeaders(headersUnsafe, req, rq)
 	}
 
-	client := &http.Client{}
-	response, err := client.Do(rq)
+	response, err := httpClient.Do(rq)
 	newReq := rq
 
 	if (err != nil || response.StatusCode >= 400) && i.alt != "" {
@@ -182,7 +192,7 @@ func (i *includeTag) FetchContent(b []byte, req *http.Request) []byte {
 			addHeaders(headersUnsafe, req, rq)
 		}
 
-		response, err = client.Do(rq)
+		response, err = httpClient.Do(rq)
 		newReq = rq
 
 		if !i.silent && (err != nil || response.StatusCode >= 400) {
