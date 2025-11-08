@@ -48,7 +48,7 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 	elem, ok := c.entries[url]
 	if !ok {
 		if logger != nil {
-			logger.Debug("Cache Get: not found", zap.String("url", url))
+			logger.Info("Cache Get: not found", zap.String("url", url))
 		}
 		return nil, false
 	}
@@ -58,7 +58,7 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 	if now.After(entry.expiresAt) {
 		// Expired, will be cleaned up by Put
 		if logger != nil {
-			logger.Debug("Cache Get: expired",
+			logger.Info("Cache Get: expired",
 				zap.String("url", url),
 				zap.Time("expired_at", entry.expiresAt),
 				zap.Time("now", now))
@@ -70,7 +70,7 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 	c.lru.MoveToFront(elem)
 
 	if logger != nil {
-		logger.Debug("Cache Get: hit",
+		logger.Info("Cache Get: hit",
 			zap.String("url", url),
 			zap.Time("expires_at", entry.expiresAt))
 	}
@@ -97,7 +97,7 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 	if loaded {
 		// Another goroutine is fetching, wait for it
 		if logger != nil {
-			logger.Debug("ESI include waiting for in-flight request", zap.String("url", url))
+			logger.Info("ESI include waiting for in-flight request", zap.String("url", url))
 		}
 		req.wg.Wait()
 
@@ -131,7 +131,7 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 		// Cache the result
 		c.Put(url, data, resp)
 		if logger != nil {
-			logger.Debug("ESI include cached", zap.String("url", url))
+			logger.Info("ESI include cached", zap.String("url", url))
 		}
 	}
 
@@ -146,7 +146,7 @@ func (c *fragmentCache) Put(url string, data []byte, resp *http.Response) {
 		if resp != nil {
 			cacheControl = resp.Header.Get("Cache-Control")
 		}
-		logger.Debug("Cache Put called",
+		logger.Info("Cache Put called",
 			zap.String("url", url),
 			zap.Int("ttl", ttl),
 			zap.String("cache_control", cacheControl),
@@ -156,7 +156,7 @@ func (c *fragmentCache) Put(url string, data []byte, resp *http.Response) {
 	if ttl == 0 {
 		// Don't cache if TTL is 0
 		if logger != nil {
-			logger.Debug("Not caching (TTL=0)", zap.String("url", url))
+			logger.Info("Not caching (TTL=0)", zap.String("url", url))
 		}
 		return
 	}
@@ -192,7 +192,7 @@ func (c *fragmentCache) Put(url string, data []byte, resp *http.Response) {
 			delete(c.entries, oldEntry.url)
 
 			if logger != nil {
-				logger.Debug("Cache evicted LRU entry", zap.String("url", oldEntry.url))
+				logger.Info("Cache evicted LRU entry", zap.String("url", oldEntry.url))
 			}
 		}
 	}
