@@ -209,7 +209,7 @@ func (i *includeTag) FetchContent(b []byte, req *http.Request) []byte {
 	}
 
 	cacheKey := sanitizeURL(i.src, req.URL)
-	
+
 	// Use GetOrFetch to prevent cache stampede
 	result, err := cache.GetOrFetch(cacheKey, func() ([]byte, *http.Response, error) {
 		// Fetch the main URL

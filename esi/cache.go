@@ -25,13 +25,14 @@ type cacheEntry struct {
 type inFlightRequest struct {
 	wg     sync.WaitGroup
 	result []byte
+	err    error
 }
 
 type fragmentCache struct {
-	mu        sync.RWMutex
-	entries   map[string]*list.Element
-	lru       *list.List
-	inFlight  sync.Map // map[string]*inFlightRequest - prevents cache stampede
+	mu       sync.RWMutex
+	entries  map[string]*list.Element
+	lru      *list.List
+	inFlight sync.Map // map[string]*inFlightRequest - prevents cache stampede
 }
 
 var cache = &fragmentCache{
@@ -46,17 +47,33 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 
 	elem, ok := c.entries[url]
 	if !ok {
+		if logger != nil {
+			logger.Debug("Cache Get: not found", zap.String("url", url))
+		}
 		return nil, false
 	}
 
 	entry := elem.Value.(*cacheEntry)
-	if time.Now().After(entry.expiresAt) {
+	now := time.Now()
+	if now.After(entry.expiresAt) {
 		// Expired, will be cleaned up by Put
+		if logger != nil {
+			logger.Debug("Cache Get: expired",
+				zap.String("url", url),
+				zap.Time("expired_at", entry.expiresAt),
+				zap.Time("now", now))
+		}
 		return nil, false
 	}
 
 	// Move to front (most recently used)
 	c.lru.MoveToFront(elem)
+
+	if logger != nil {
+		logger.Debug("Cache Get: hit",
+			zap.String("url", url),
+			zap.Time("expires_at", entry.expiresAt))
+	}
 
 	return entry.data, true
 }
@@ -83,13 +100,9 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 			logger.Debug("ESI include waiting for in-flight request", zap.String("url", url))
 		}
 		req.wg.Wait()
-		
-		// Check cache again after wait - the fetcher should have populated it
-		if cached, ok := c.Get(url); ok {
-			return cached, nil
-		}
-		// If still not in cache, the fetch failed, return empty
-		return nil, nil
+
+		// Return the shared result from the fetcher
+		return req.result, req.err
 	}
 
 	// We're the first one - do the fetch
@@ -105,6 +118,11 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 
 	// Call the fetch function
 	data, resp, err := fetchFn()
+	
+	// Store result and error for waiting goroutines
+	req.result = data
+	req.err = err
+
 	if err != nil {
 		return nil, err
 	}
@@ -117,15 +135,29 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 		}
 	}
 
-	req.result = data
 	return data, nil
 }
 
 // Put stores a fragment in cache with TTL parsed from response headers
 func (c *fragmentCache) Put(url string, data []byte, resp *http.Response) {
 	ttl := parseTTL(resp)
+	if logger != nil {
+		cacheControl := ""
+		if resp != nil {
+			cacheControl = resp.Header.Get("Cache-Control")
+		}
+		logger.Debug("Cache Put called",
+			zap.String("url", url),
+			zap.Int("ttl", ttl),
+			zap.String("cache_control", cacheControl),
+			zap.Int("data_size", len(data)))
+	}
+	
 	if ttl == 0 {
 		// Don't cache if TTL is 0
+		if logger != nil {
+			logger.Debug("Not caching (TTL=0)", zap.String("url", url))
+		}
 		return
 	}
 

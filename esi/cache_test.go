@@ -32,7 +32,7 @@ func TestCacheBasicFunctionality(t *testing.T) {
 		t.Errorf("Expected 1 request on first parse, got %d", requestCount)
 	}
 
-	// Second request - cache hit  
+	// Second request - cache hit
 	html2 := []byte(htmlTemplate)
 	result2 := Parse(html2, req)
 	if requestCount != 1 {
