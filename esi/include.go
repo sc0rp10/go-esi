@@ -118,13 +118,23 @@ func (i *includeTag) Process(b []byte, req *http.Request) ([]byte, int) {
 		return nil, len(b)
 	}
 
+	// Check cache first
+	cacheKey := sanitizeURL(i.src, req.URL)
+	if cached, ok := cache.Get(cacheKey); ok {
+		if logger != nil {
+			logger.Info("ESI include cache hit", zap.String("url", cacheKey))
+		}
+		// Cached content is already parsed
+		return cached, i.length
+	}
+
 	// Log the start of fetch for debugging parallel execution
 	startTime := time.Now()
 	if logger != nil {
-		logger.Info("ESI include fetch started", zap.String("url", i.src))
+		logger.Info("ESI include cache miss, fetching", zap.String("url", cacheKey))
 	}
 
-	rq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, sanitizeURL(i.src, req.URL), nil)
+	rq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, cacheKey, nil)
 	addHeaders(headersSafe, req, rq)
 
 	if rq.URL.Scheme == req.URL.Scheme && rq.URL.Host == req.URL.Host {
@@ -135,14 +145,23 @@ func (i *includeTag) Process(b []byte, req *http.Request) ([]byte, int) {
 	elapsed := time.Since(startTime)
 	if logger != nil {
 		logger.Info("ESI include fetch completed",
-			zap.String("url", i.src),
+			zap.String("url", cacheKey),
 			zap.Duration("duration", elapsed),
 			zap.Error(err))
 	}
 	req = rq
 
 	if (err != nil || response.StatusCode >= 400) && i.alt != "" {
-		rq, _ = http.NewRequestWithContext(context.Background(), http.MethodGet, sanitizeURL(i.alt, req.URL), nil)
+		// Try alt URL
+		altKey := sanitizeURL(i.alt, req.URL)
+		if cached, ok := cache.Get(altKey); ok {
+			if logger != nil {
+				logger.Info("ESI include alt cache hit", zap.String("url", altKey))
+			}
+			return cached, i.length
+		}
+
+		rq, _ = http.NewRequestWithContext(context.Background(), http.MethodGet, altKey, nil)
 		addHeaders(headersSafe, req, rq)
 
 		if rq.URL.Scheme == req.URL.Scheme && rq.URL.Host == req.URL.Host {
@@ -166,7 +185,18 @@ func (i *includeTag) Process(b []byte, req *http.Request) ([]byte, int) {
 	defer response.Body.Close()
 	_, _ = io.Copy(&buf, response.Body)
 
-	b = Parse(buf.Bytes(), req)
+	rawContent := buf.Bytes()
+
+	// Recursively parse nested ESI tags
+	b = Parse(rawContent, req)
+
+	// Cache successful responses (200 OK) - cache the parsed content
+	if response.StatusCode == http.StatusOK {
+		cache.Put(cacheKey, b, response)
+		if logger != nil {
+			logger.Debug("ESI include cached", zap.String("url", cacheKey))
+		}
+	}
 
 	return b, i.length
 }
@@ -197,7 +227,21 @@ func (i *includeTag) FetchContent(b []byte, req *http.Request) []byte {
 		return nil
 	}
 
-	rq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, sanitizeURL(i.src, req.URL), nil)
+	// Check cache first
+	cacheKey := sanitizeURL(i.src, req.URL)
+	if cached, ok := cache.Get(cacheKey); ok {
+		if logger != nil {
+			logger.Info("ESI include cache hit", zap.String("url", cacheKey))
+		}
+		// Cached content is already parsed
+		return cached
+	}
+
+	if logger != nil {
+		logger.Info("ESI include cache miss, fetching", zap.String("url", cacheKey))
+	}
+
+	rq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, cacheKey, nil)
 	addHeaders(headersSafe, req, rq)
 
 	if rq.URL.Scheme == req.URL.Scheme && rq.URL.Host == req.URL.Host {
@@ -208,7 +252,16 @@ func (i *includeTag) FetchContent(b []byte, req *http.Request) []byte {
 	newReq := rq
 
 	if (err != nil || response.StatusCode >= 400) && i.alt != "" {
-		rq, _ = http.NewRequestWithContext(context.Background(), http.MethodGet, sanitizeURL(i.alt, req.URL), nil)
+		// Try alt URL
+		altKey := sanitizeURL(i.alt, req.URL)
+		if cached, ok := cache.Get(altKey); ok {
+			if logger != nil {
+				logger.Info("ESI include alt cache hit", zap.String("url", altKey))
+			}
+			return cached
+		}
+
+		rq, _ = http.NewRequestWithContext(context.Background(), http.MethodGet, altKey, nil)
 		addHeaders(headersSafe, req, rq)
 
 		if rq.URL.Scheme == req.URL.Scheme && rq.URL.Host == req.URL.Host {
@@ -232,6 +285,18 @@ func (i *includeTag) FetchContent(b []byte, req *http.Request) []byte {
 	defer response.Body.Close()
 	_, _ = io.Copy(&buf, response.Body)
 
+	rawContent := buf.Bytes()
+
 	// Recursively parse nested ESI tags using the request from the fetched resource
-	return Parse(buf.Bytes(), newReq)
+	parsedContent := Parse(rawContent, newReq)
+
+	// Cache successful responses (200 OK) - cache the parsed content
+	if response.StatusCode == http.StatusOK {
+		cache.Put(cacheKey, parsedContent, response)
+		if logger != nil {
+			logger.Debug("ESI include cached", zap.String("url", cacheKey))
+		}
+	}
+
+	return parsedContent
 }
