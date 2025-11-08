@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -204,5 +205,52 @@ func TestCacheStats(t *testing.T) {
 	}
 	if size == 0 {
 		t.Errorf("Expected non-zero cache size")
+	}
+}
+
+func TestCacheStampedePrevention(t *testing.T) {
+	cache.Reset() // Start with clean cache
+
+	requestCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		// Simulate slow backend
+		time.Sleep(100 * time.Millisecond)
+		w.Header().Set("Cache-Control", "max-age=10")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("<p>Fragment content</p>"))
+	}))
+	defer ts.Close()
+
+	htmlTemplate := `<html><esi:include src="` + ts.URL + `" /></html>`
+
+	// Launch 10 concurrent requests
+	concurrency := 10
+	var wg sync.WaitGroup
+	results := make([][]byte, concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			html := []byte(htmlTemplate)
+			req := httptest.NewRequest("GET", "http://example.com", nil)
+			results[index] = Parse(html, req)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Should only have made 1 backend request despite 10 concurrent requests
+	if requestCount != 1 {
+		t.Errorf("Cache stampede not prevented: expected 1 backend request, got %d", requestCount)
+	}
+
+	// All results should be identical
+	expectedResult := string(results[0])
+	for i := 1; i < concurrency; i++ {
+		if string(results[i]) != expectedResult {
+			t.Errorf("Result %d doesn't match first result", i)
+		}
 	}
 }

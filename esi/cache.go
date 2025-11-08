@@ -22,10 +22,16 @@ type cacheEntry struct {
 	url       string
 }
 
+type inFlightRequest struct {
+	wg     sync.WaitGroup
+	result []byte
+}
+
 type fragmentCache struct {
-	mu      sync.RWMutex
-	entries map[string]*list.Element
-	lru     *list.List
+	mu        sync.RWMutex
+	entries   map[string]*list.Element
+	lru       *list.List
+	inFlight  sync.Map // map[string]*inFlightRequest - prevents cache stampede
 }
 
 var cache = &fragmentCache{
@@ -53,6 +59,66 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 	c.lru.MoveToFront(elem)
 
 	return entry.data, true
+}
+
+// GetOrFetch retrieves from cache or ensures only one fetch happens for concurrent requests.
+// This prevents cache stampede when multiple requests arrive for an expired/missing entry.
+// The fetchFn is called only once per URL, other requests wait for the result.
+func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Response, error)) ([]byte, error) {
+	// Fast path: check cache first
+	if cached, ok := c.Get(url); ok {
+		if logger != nil {
+			logger.Info("ESI include cache hit", zap.String("url", url))
+		}
+		return cached, nil
+	}
+
+	// Cache miss - check if someone else is already fetching this URL
+	flight, loaded := c.inFlight.LoadOrStore(url, &inFlightRequest{})
+	req := flight.(*inFlightRequest)
+
+	if loaded {
+		// Another goroutine is fetching, wait for it
+		if logger != nil {
+			logger.Debug("ESI include waiting for in-flight request", zap.String("url", url))
+		}
+		req.wg.Wait()
+		
+		// Check cache again after wait - the fetcher should have populated it
+		if cached, ok := c.Get(url); ok {
+			return cached, nil
+		}
+		// If still not in cache, the fetch failed, return empty
+		return nil, nil
+	}
+
+	// We're the first one - do the fetch
+	req.wg.Add(1)
+	defer func() {
+		req.wg.Done()
+		c.inFlight.Delete(url) // Clean up in-flight tracking
+	}()
+
+	if logger != nil {
+		logger.Info("ESI include cache miss, fetching", zap.String("url", url))
+	}
+
+	// Call the fetch function
+	data, resp, err := fetchFn()
+	if err != nil {
+		return nil, err
+	}
+
+	if resp != nil && resp.StatusCode == http.StatusOK {
+		// Cache the result
+		c.Put(url, data, resp)
+		if logger != nil {
+			logger.Debug("ESI include cached", zap.String("url", url))
+		}
+	}
+
+	req.result = data
+	return data, nil
 }
 
 // Put stores a fragment in cache with TTL parsed from response headers
@@ -118,7 +184,7 @@ func parseTTL(resp *http.Response) int {
 		directive = strings.TrimSpace(directive)
 		if strings.HasPrefix(directive, "max-age=") {
 			maxAgeStr := strings.TrimPrefix(directive, "max-age=")
-			if maxAge, err := strconv.Atoi(maxAgeStr); err == nil && maxAge > 0 {
+			if maxAge, err := strconv.Atoi(maxAgeStr); err == nil && maxAge >= 0 {
 				return maxAge
 			}
 		}
