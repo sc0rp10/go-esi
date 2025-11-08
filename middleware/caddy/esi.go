@@ -10,6 +10,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/darkweak/go-esi/writer"
+	"go.uber.org/zap"
 )
 
 var bufPool *sync.Pool = &sync.Pool{
@@ -29,7 +30,9 @@ func init() {
 }
 
 // ESI to handle, process and serve ESI tags.
-type ESI struct{}
+type ESI struct{
+	logger *zap.Logger
+}
 
 // CaddyModule returns the Caddy module information.
 func (ESI) CaddyModule() caddy.ModuleInfo {
@@ -76,7 +79,11 @@ func (e *ESI) ServeHTTP(rw http.ResponseWriter, r *http.Request, next caddyhttp.
 }
 
 // Provision implements caddy.Provisioner
-func (*ESI) Provision(caddy.Context) error {
+func (e *ESI) Provision(ctx caddy.Context) error {
+	e.logger = ctx.Logger()
+	e.logger.Info("ESI middleware enabled with parallel processing")
+	// Make logger available to the ESI package
+	writer.SetLogger(e.logger)
 	return nil
 }
 

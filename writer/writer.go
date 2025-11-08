@@ -5,7 +5,16 @@ import (
 	"net/http"
 
 	"github.com/darkweak/go-esi/esi"
+	"go.uber.org/zap"
 )
+
+var logger *zap.Logger
+
+// SetLogger sets the logger to be used for ESI processing
+func SetLogger(l *zap.Logger) {
+	logger = l
+	esi.SetLogger(l)
+}
 
 type Writer struct {
 	buf       *bytes.Buffer

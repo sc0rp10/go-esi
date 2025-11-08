@@ -7,7 +7,17 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"time"
+
+	"go.uber.org/zap"
 )
+
+var logger *zap.Logger
+
+// SetLogger sets the logger to be used for ESI processing
+func SetLogger(l *zap.Logger) {
+	logger = l
+}
 
 const include = "include"
 
@@ -108,6 +118,12 @@ func (i *includeTag) Process(b []byte, req *http.Request) ([]byte, int) {
 		return nil, len(b)
 	}
 
+	// Log the start of fetch for debugging parallel execution
+	startTime := time.Now()
+	if logger != nil {
+		logger.Info("ESI include fetch started", zap.String("url", i.src))
+	}
+
 	rq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, sanitizeURL(i.src, req.URL), nil)
 	addHeaders(headersSafe, req, rq)
 
@@ -116,6 +132,13 @@ func (i *includeTag) Process(b []byte, req *http.Request) ([]byte, int) {
 	}
 
 	response, err := httpClient.Do(rq)
+	elapsed := time.Since(startTime)
+	if logger != nil {
+		logger.Info("ESI include fetch completed",
+			zap.String("url", i.src),
+			zap.Duration("duration", elapsed),
+			zap.Error(err))
+	}
 	req = rq
 
 	if (err != nil || response.StatusCode >= 400) && i.alt != "" {
