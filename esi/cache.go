@@ -35,9 +35,25 @@ type fragmentCache struct {
 	inFlight sync.Map // map[string]*inFlightRequest - prevents cache stampede
 }
 
-var cache = &fragmentCache{
-	entries: make(map[string]*list.Element),
-	lru:     list.New(),
+// MetricsObserver is a callback interface for cache metrics
+type MetricsObserver interface {
+	OnCacheHit()
+	OnCacheMiss()
+	OnCacheEviction()
+	OnStampedeWait()
+}
+
+var (
+	cache = &fragmentCache{
+		entries: make(map[string]*list.Element),
+		lru:     list.New(),
+	}
+	metricsObserver MetricsObserver
+)
+
+// SetMetricsObserver sets the global metrics observer
+func SetMetricsObserver(observer MetricsObserver) {
+	metricsObserver = observer
 }
 
 // Get retrieves a cached fragment if it exists and is not expired
@@ -49,6 +65,9 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 	if !ok {
 		if logger != nil {
 			logger.Info("Cache Get: not found", zap.String("url", url))
+		}
+		if metricsObserver != nil {
+			metricsObserver.OnCacheMiss()
 		}
 		return nil, false
 	}
@@ -63,6 +82,9 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 				zap.Time("expired_at", entry.expiresAt),
 				zap.Time("now", now))
 		}
+		if metricsObserver != nil {
+			metricsObserver.OnCacheMiss()
+		}
 		return nil, false
 	}
 
@@ -75,6 +97,9 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 			zap.Time("expires_at", entry.expiresAt))
 	}
 
+	if metricsObserver != nil {
+		metricsObserver.OnCacheHit()
+	}
 	return entry.data, true
 }
 
@@ -98,6 +123,9 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 		// Another goroutine is fetching, wait for it
 		if logger != nil {
 			logger.Info("ESI include waiting for in-flight request", zap.String("url", url))
+		}
+		if metricsObserver != nil {
+			metricsObserver.OnStampedeWait()
 		}
 		req.wg.Wait()
 
@@ -193,6 +221,9 @@ func (c *fragmentCache) Put(url string, data []byte, resp *http.Response) {
 
 			if logger != nil {
 				logger.Info("Cache evicted LRU entry", zap.String("url", oldEntry.url))
+			}
+			if metricsObserver != nil {
+				metricsObserver.OnCacheEviction()
 			}
 		}
 	}

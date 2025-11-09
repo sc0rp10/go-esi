@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ESI Cache Test</title>
+</head>
+<body>
+    <h1>ESI Cache Debug Test</h1>
+    <p>This page has 3 ESI fragments. Check Caddy logs to see cache behavior.</p>
+    
+    <div style="border: 1px solid blue; padding: 10px; margin: 10px;">
+        <h2>Fragment 1:</h2>
+        <esi:include src="/fragment1" />
+    </div>
+    
+    <div style="border: 1px solid green; padding: 10px; margin: 10px;">
+        <h2>Fragment 2:</h2>
+        <esi:include src="/fragment2" />
+    </div>
+    
+    <div style="border: 1px solid red; padding: 10px; margin: 10px;">
+        <h2>Fragment 3:</h2>
+        <esi:include src="/fragment3" />
+    </div>
+    
+    <hr>
+    <p><strong>Testing Instructions:</strong></p>
+    <ol>
+        <li>First load: Should see "Cache Get: not found" × 3, then "Cache Put called" × 3</li>
+        <li>Reload immediately: Should see "Cache Get: hit" × 3 (instant!)</li>
+        <li>Wait 5+ minutes: Should see "Cache Get: expired" × 3, then re-fetch</li>
+    </ol>
+</body>
+</html>
