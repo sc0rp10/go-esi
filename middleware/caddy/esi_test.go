@@ -10,17 +10,17 @@ import (
 const expectedOutput = `<html>
     <head>
         <title>Hello from domain.com:9080</title>
-        
+
     </head>
     <body>
         <esi:include src="domain.com:9080/not-interpreted"/>
         <h1>CHAINED 2</h1>
         <h1>ALTERNATE ESI INCLUDE</h1>
-         
+
                 <div>
                     <h1>ESI INCLUDE</h1>
                 </div>
-            
+
     </body>
 </html>
 `
@@ -39,22 +39,22 @@ func loadConfiguration(t *testing.T) *caddytest.Tester {
 			header Content-Type text/html
 			respond `+"`<esi:include src=\"/chained-esi-include-2\"/>`"+`
 		}
-	
+
 		route /chained-esi-include-2 {
 			header Content-Type text/html
 			respond "<h1>CHAINED 2</h1>"
 		}
-	
+
 		route /esi-include {
 			header Content-Type text/html
 			respond "<h1>ESI INCLUDE</h1>"
 		}
-	
+
 		route /alt-esi-include {
 			header Content-Type text/html
 			respond "<h1>ALTERNATE ESI INCLUDE</h1>"
 		}
-	
+
 		route /* {
 			esi
 			root * ../../fixtures

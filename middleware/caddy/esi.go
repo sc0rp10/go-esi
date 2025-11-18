@@ -3,6 +3,7 @@ package caddy_esi
 import (
 	"bytes"
 	"net/http"
+	"runtime"
 	"sync"
 
 	"github.com/caddyserver/caddy/v2"
@@ -62,8 +63,9 @@ func (e *ESI) ServeHTTP(rw http.ResponseWriter, r *http.Request, next caddyhttp.
 	go func(w *writer.Writer) {
 		var i = 0
 		for {
-			if len(w.AsyncBuf) <= i {
-				continue
+			// Wait until the channel is available
+			for len(w.AsyncBuf) <= i {
+				runtime.Gosched() // Yield to scheduler without sleep
 			}
 			rs := <-w.AsyncBuf[i]
 			if rs == nil {
