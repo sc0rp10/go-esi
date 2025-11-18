@@ -3,7 +3,6 @@ package caddy_esi
 import (
 	"bytes"
 	"net/http"
-	"runtime"
 	"sync"
 
 	"github.com/caddyserver/caddy/v2"
@@ -13,7 +12,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sc0rp10/go-esi/esi"
-	"github.com/sc0rp10/go-esi/writer"
 	"go.uber.org/zap"
 )
 
@@ -56,48 +54,70 @@ func (ESI) CaddyModule() caddy.ModuleInfo {
 
 // ServeHTTP implements caddyhttp.MiddlewareHandler
 func (e *ESI) ServeHTTP(rw http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
-	buf := bufPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	defer bufPool.Put(buf)
-	cw := writer.NewWriter(buf, rw, r)
-	go func(w *writer.Writer) {
-		var i = 0
-		for {
-			// Wait until the channel is available
-			for len(w.AsyncBuf) <= i {
-				runtime.Gosched() // Yield to scheduler without sleep
-			}
-			rs := <-w.AsyncBuf[i]
-			if rs == nil {
-				w.Done <- true
-				break
-			}
-			_, _ = rw.Write(rs)
-			i++
+	// Determine if we should buffer the response
+	shouldBuffer := func(status int, header http.Header) bool {
+		// Only buffer successful HTML responses
+		if status != http.StatusOK {
+			return false
 		}
-	}(cw)
-	next.ServeHTTP(cw, r)
-	cw.Header().Del("Content-Length")
-	if cw.Rq.ProtoMajor == 1 {
-		cw.Header().Set("Content-Encoding", "chunked")
+
+		ct := header.Get("Content-Type")
+		return ct != "" && (bytes.Contains([]byte(ct), []byte("text/html")) ||
+			bytes.Contains([]byte(ct), []byte("application/xhtml+xml")))
 	}
-	cw.AsyncBuf = append(cw.AsyncBuf, make(chan []byte))
-	go func(w *writer.Writer, iteration int) {
-		w.AsyncBuf[iteration] <- nil
-	}(cw, cw.Iteration)
 
-	<-cw.Done
+	// Create recorder to buffer the response
+	buf := bufPool.Get().(*bytes.Buffer)
+	defer bufPool.Put(buf)
 
-	return nil
+	recorder := caddyhttp.NewResponseRecorder(rw, buf, shouldBuffer)
+
+	// Let upstream write to the recorder
+	err := next.ServeHTTP(recorder, r)
+	if err != nil {
+		return err
+	}
+
+	// If not buffered, response already written through
+	if !recorder.Buffered() {
+		return nil
+	}
+
+	// Get the buffered response body
+	body := recorder.Buffer().Bytes()
+
+	if e.logger != nil {
+		e.logger.Debug("ESI middleware received response",
+			zap.Int("status", recorder.Status()),
+			zap.Int("body_size", len(body)),
+			zap.Bool("has_esi", esi.HasOpenedTags(body)))
+	}
+
+	// Check if response contains ESI tags
+	if !esi.HasOpenedTags(body) {
+		// No ESI tags, write buffered response as-is
+		rw.WriteHeader(recorder.Status())
+		_, err = rw.Write(body)
+		return err
+	}
+
+	// Process ESI tags
+	if e.logger != nil {
+		e.logger.Info("Processing ESI tags", zap.String("url", r.URL.String()))
+	}
+
+	processed := esi.Parse(body, r)
+
+	// Write processed response
+	rw.WriteHeader(recorder.Status())
+	_, err = rw.Write(processed)
+	return err
 }
 
 // Provision implements caddy.Provisioner
 func (e *ESI) Provision(ctx caddy.Context) error {
 	e.logger = ctx.Logger()
-	e.logger.Info("ESI middleware enabled with parallel processing")
-
-	// Make logger available to the ESI package
-	writer.SetLogger(e.logger)
+	e.logger.Info("ESI middleware enabled with buffered processing")
 
 	// Initialize Prometheus metrics if registry is available
 	if reg := ctx.GetMetricsRegistry(); reg != nil {
