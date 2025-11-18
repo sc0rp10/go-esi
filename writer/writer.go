@@ -3,6 +3,7 @@ package writer
 import (
 	"bytes"
 	"net/http"
+	"sync"
 
 	"github.com/sc0rp10/go-esi/esi"
 	"go.uber.org/zap"
@@ -21,6 +22,8 @@ type Writer struct {
 	rw        http.ResponseWriter
 	Rq        *http.Request
 	AsyncBuf  []chan []byte
+	BufMu     sync.Mutex    // Protects AsyncBuf from concurrent access
+	Ready     chan struct{} // Signals when a new channel is added to AsyncBuf
 	Done      chan bool
 	flushed   bool
 	Iteration int
@@ -44,6 +47,7 @@ func NewWriter(buf *bytes.Buffer, rw http.ResponseWriter, rq *http.Request) *Wri
 		Rq:       rq,
 		rw:       rw,
 		AsyncBuf: make([]chan []byte, 0),
+		Ready:    make(chan struct{}, 100), // Buffered to avoid blocking Write()
 		Done:     make(chan bool),
 	}
 }
@@ -90,11 +94,16 @@ func (w *Writer) Write(b []byte) (int, error) {
 			startPos, nextPos, t := esi.ReadToTag(buf[position:], position)
 
 			if startPos != 0 {
-				w.AsyncBuf = append(w.AsyncBuf, make(chan []byte))
-				go func(tmpBuf []byte, i int, cw *Writer) {
-					cw.AsyncBuf[i] <- tmpBuf
-				}(buf[position:position+startPos], w.Iteration, w)
+				ch := make(chan []byte)
+				w.BufMu.Lock()
+				w.AsyncBuf = append(w.AsyncBuf, ch)
+				idx := w.Iteration
 				w.Iteration++
+				w.BufMu.Unlock()
+				w.Ready <- struct{}{} // Signal that new channel is ready
+				go func(tmpBuf []byte, i int, c chan []byte) {
+					c <- tmpBuf
+				}(buf[position:position+startPos], idx, ch)
 			}
 
 			if t == nil {
@@ -110,24 +119,31 @@ func (w *Writer) Write(b []byte) (int, error) {
 
 			position += nextPos
 
-			w.AsyncBuf = append(w.AsyncBuf, make(chan []byte))
+			ch := make(chan []byte)
+			w.BufMu.Lock()
+			w.AsyncBuf = append(w.AsyncBuf, ch)
+			w.Iteration++
+			w.BufMu.Unlock()
+			w.Ready <- struct{}{} // Signal that new channel is ready
 
-			go func(currentTag esi.Tag, tmpBuf []byte, cw *Writer, Iteration int) {
-				p, _ := currentTag.Process(tmpBuf, cw.Rq)
-				cw.AsyncBuf[Iteration] <- p
-			}(t, buf[position:(position-nextPos)+startPos+closePosition], w, w.Iteration)
+			go func(currentTag esi.Tag, tmpBuf []byte, req *http.Request, c chan []byte) {
+				p, _ := currentTag.Process(tmpBuf, req)
+				c <- p
+			}(t, buf[position:(position-nextPos)+startPos+closePosition], w.Rq, ch)
 
 			position += startPos + closePosition - nextPos
-			w.Iteration++
 		}
 		w.buf.Write(buf[position:])
 
 		return len(b), nil
 	}
 
-	w.AsyncBuf = append(w.AsyncBuf, make(chan []byte))
-	w.AsyncBuf[w.Iteration] <- buf
-	w.Iteration++
+	ch := make(chan []byte)
+	w.BufMu.Lock()
+	w.AsyncBuf = append(w.AsyncBuf, ch)
+	w.BufMu.Unlock()
+	w.Ready <- struct{}{} // Signal that new channel is ready
+	ch <- buf
 
 	return len(b), nil
 }
