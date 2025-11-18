@@ -56,8 +56,9 @@ func (w *Writer) Header() http.Header {
 // WriteHeader implements http.ResponseWriter.
 func (w *Writer) WriteHeader(statusCode int) {
 	if statusCode == 0 {
-		w.rw.WriteHeader(http.StatusOK)
+		statusCode = http.StatusOK
 	}
+	w.rw.WriteHeader(statusCode)
 }
 
 // Flush implements http.Flusher.

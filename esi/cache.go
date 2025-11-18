@@ -146,7 +146,7 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 
 	// Call the fetch function
 	data, resp, err := fetchFn()
-	
+
 	// Store result and error for waiting goroutines
 	req.result = data
 	req.err = err
@@ -180,7 +180,7 @@ func (c *fragmentCache) Put(url string, data []byte, resp *http.Response) {
 			zap.String("cache_control", cacheControl),
 			zap.Int("data_size", len(data)))
 	}
-	
+
 	if ttl == 0 {
 		// Don't cache if TTL is 0
 		if logger != nil {

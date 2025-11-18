@@ -1,8 +1,0 @@
-server:
-  command: "php psr-worker.php"
-http:
-  address: 0.0.0.0:80
-  pool:
-    num_workers: 4
-  esi: {}
-  middleware: [ "headers", "gzip", "esi" ]
