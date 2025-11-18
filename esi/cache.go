@@ -181,13 +181,8 @@ func (c *fragmentCache) Put(url string, data []byte, resp *http.Response) {
 			zap.Int("data_size", len(data)))
 	}
 
-	if ttl == 0 {
-		// Don't cache if TTL is 0
-		if logger != nil {
-			logger.Info("Not caching (TTL=0)", zap.String("url", url))
-		}
-		return
-	}
+	// Note: We removed the TTL=0 check - parseTTL always returns >= defaultTTL now
+	// ESI fragments are always cached, regardless of cache headers
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -230,6 +225,9 @@ func (c *fragmentCache) Put(url string, data []byte, resp *http.Response) {
 }
 
 // parseTTL extracts TTL from Cache-Control header, returns defaultTTL if not found
+// Note: Always returns at least defaultTTL, even if response has no-cache/no-store.
+// This is intentional - if ESI markup exists, developers want caching.
+// Missing cache headers is a configuration error, not an intent to disable caching.
 func parseTTL(resp *http.Response) int {
 	if resp == nil {
 		return defaultTTL
@@ -247,16 +245,19 @@ func parseTTL(resp *http.Response) int {
 		directive = strings.TrimSpace(directive)
 		if strings.HasPrefix(directive, "max-age=") {
 			maxAgeStr := strings.TrimPrefix(directive, "max-age=")
-			if maxAge, err := strconv.Atoi(maxAgeStr); err == nil && maxAge >= 0 {
+			if maxAge, err := strconv.Atoi(maxAgeStr); err == nil && maxAge > 0 {
 				return maxAge
 			}
 		}
-		// Check for no-cache or no-store directives
-		if directive == "no-cache" || directive == "no-store" {
-			return 0
-		}
 	}
 
+	// Always return defaultTTL, even for no-cache/no-store/max-age=0
+	// If developers added ESI markup, they want caching - wrong headers are config errors
+	if logger != nil {
+		logger.Info("Using default TTL (ignoring cache directives)",
+			zap.String("cache_control", cacheControl),
+			zap.Int("default_ttl", defaultTTL))
+	}
 	return defaultTTL
 }
 

@@ -118,10 +118,10 @@ func TestParseTTL(t *testing.T) {
 		{"max-age only", "max-age=3600", 3600},
 		{"max-age with other directives", "public, max-age=7200, must-revalidate", 7200},
 		{"no cache-control", "", defaultTTL},
-		{"no-cache directive", "no-cache", 0},
-		{"no-store directive", "no-store", 0},
+		{"no-cache directive", "no-cache", defaultTTL}, // Changed: now always caches
+		{"no-store directive", "no-store", defaultTTL}, // Changed: now always caches
 		{"invalid max-age", "max-age=invalid", defaultTTL},
-		{"zero max-age", "max-age=0", 0},
+		{"zero max-age", "max-age=0", defaultTTL}, // Changed: now always caches
 	}
 
 	for _, tt := range tests {
