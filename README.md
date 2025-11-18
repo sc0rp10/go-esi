@@ -1,7 +1,16 @@
-go-esi
-------
+go-esi (sc0rp10 fork)
+---------------------
+
+> **Note:** This is a fork of [darkweak/go-esi](https://github.com/darkweak/go-esi). See [FORK_NOTICE.md](FORK_NOTICE.md) for details on modifications and attribution.
 
 go-esi is the implementation of the non-standard ESI (Edge-Side-Include) specification from the w3. With that you'll be able to use the ESI tags and process them in your favorite golang servers.
+
+### Fork Highlights
+
+This fork includes:
+- **Fixed critical bug:** HTTP status codes (302, 404, 500, etc.) are now properly preserved instead of being overridden with 200 OK
+- **Enhanced testing:** Comprehensive tests to prevent status code regression
+- **Maintained independently:** Module path changed to `github.com/sc0rp10/go-esi` for cleaner dependency management
 
 ## What are the ESI tags
 The ESI tags were introduced by Akamai to add some dynamic tags and only re-render these parts on the server-side.
@@ -22,7 +31,7 @@ https://www.w3.org/TR/esi-lang/
 
 ## Install
 ```bash
-go get -u github.com/darkweak/go-esi
+go get -u github.com/sc0rp10/go-esi
 ```
 
 ## Usage
@@ -30,7 +39,7 @@ go get -u github.com/darkweak/go-esi
 ```go
 import (
     // ...
-    github.com/darkweak/go-esi/esi
+    "github.com/sc0rp10/go-esi/esi"
 )
 
 //...
@@ -68,77 +77,20 @@ func functionToParseESITags(b []byte, r *http.Request) []byte {
 
 ## Available as middleware
 - [x] Caddy
-- [x] Træfik
-- [x] Roadrunner
 
 ### Caddy middleware
 ```bash
-xcaddy build --with github.com/darkweak/go-esi/middleware/caddy
+xcaddy build --with github.com/sc0rp10/go-esi/middleware/caddy
 ```
-Refer to the [sample Caddyfile](https://github.com/darkweak/go-esi/blob/master/middleware/caddy/Caddyfile) to know how to use that.
+Refer to the [sample Caddyfile](https://github.com/sc0rp10/go-esi/blob/master/middleware/caddy/Caddyfile) to know how to use that.
 
-### Roadrunner middleware
-To use the `go-esi` processor as Roadrunner middleware, you just have to follow the steps below.  
-You have to build your `rr` binary with the `go-esi` dependency.
-```toml
-[velox]
-build_args = ['-trimpath', '-ldflags', '-s -X github.com/roadrunner-server/roadrunner/v2/internal/meta.version=v2.12.0 -X github.com/roadrunner-server/roadrunner/v2/internal/meta.buildTime=10:00:00']
+### Examples
 
-[roadrunner]
-ref = "v2.12.3"
+The repository includes several example implementations:
 
-[github]
-    [github.token]
-    token = "GH_TOKEN"
-
-    [github.plugins]
-    logger = { ref = "v3.2.0", owner = "roadrunner-server", repository = "logger" }
-    esi = { ref = "master", owner = "darkweak", repository = "go-esi", folder = "middleware/roadrunner", replace = "/opt/middleware/roadrunner" }
-    server = { ref = "v3.2.0", owner = "roadrunner-server", repository = "server" }
-    gzip = { ref = "v3.2.0", owner = "roadrunner-server", repository = "gzip" }
-    http = { ref = "v3.2.0", owner = "roadrunner-server", repository = "http" }
-
-[log]
-level = "debug"
-mode = "development"
-```
-
-After that, you'll be able to set enable and add the esi processor to the middleware chain.
-```yaml
-# .rr.yaml
-http:
-  # Other http sub keys
-  esi: {}
-  middleware:
-    - headers
-    - gzip
-    - esi
-```
-
-### Træfik middleware
-```yaml
-# anywhere/traefik.yml
-experimental:
-  plugins:
-    souin:
-      moduleName: github.com/darkweak/go-esi
-      version: v0.0.6
-```
-```yaml
-# anywhere/dynamic-configuration
-http:
-  routers:
-    whoami:
-      middlewares:
-        - esi
-      service: whoami
-      rule: Host(`domain.com`)
-  middlewares:
-    esi:
-      plugin:
-        esi: {}
-```
-Refer to the [sample traefik file](https://github.com/darkweak/go-esi/blob/master/middleware/traefik/esi-configuration.yml) to know how to use that.
+- **`middleware/server/`** - Basic HTTP server example
+- **`middleware/standalone/`** - Standalone ESI processor example
+- **`examples/`** - Additional usage examples
 
 ## TODO
 - [x] choose tag

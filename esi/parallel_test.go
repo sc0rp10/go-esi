@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkweak/go-esi/esi"
+	"github.com/sc0rp10/go-esi/esi"
 )
 
 // TestParallelProcessing verifies that parallel mode actually fetches includes concurrently

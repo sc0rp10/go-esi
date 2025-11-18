@@ -1,12 +1,12 @@
-.PHONY: bump-version lint run-caddy run-roadrunner run-server run-traefik vendor
-MIDDLEWARES_LIST=caddy roadrunner server traefik
+.PHONY: bump-version lint run-caddy run-server vendor
+MIDDLEWARES_LIST=caddy
 
 bump-version:
 	test $(from)
 	test $(to)
 	sed -i '' 's/version: $(from)/version: $(to)/' README.md
 	for middleware in $(MIDDLEWARES_LIST) ; do \
-		sed -i '' 's/github.com\/darkweak\/go-esi $(from)/github.com\/darkweak\/go-esi $(to)/' middleware/$$middleware/go.mod ; \
+		sed -i '' 's/github.com\/sc0rp10\/go-esi $(from)/github.com\/sc0rp10\/go-esi $(to)/' middleware/$$middleware/go.mod ; \
 	done
 
 lint: ## Run golangci-lint to ensure the code quality
@@ -15,14 +15,11 @@ lint: ## Run golangci-lint to ensure the code quality
 run-caddy: ## Build and run caddy binary
 	cd middleware/caddy && $(MAKE) build && $(MAKE) run
 
-run-roadrunner: ## Build and run roadrunner
-	cd middleware/roadrunner && $(MAKE) build && $(MAKE) run
-
-run-server: ## Run server main.go
+run-server: ## Run server example
 	go run middleware/server/main.go
 
-run-traefik: ## Build and run træfik
-	cd middleware/traefik && $(MAKE) build && $(MAKE) run
+run-standalone: ## Run standalone example
+	go run middleware/standalone/main.go
 
 vendor: ## Generate and prepare vendors for each plugin
 	go mod tidy && go mod download

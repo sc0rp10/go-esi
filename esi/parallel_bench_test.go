@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkweak/go-esi/esi"
+	"github.com/sc0rp10/go-esi/esi"
 )
 
 // BenchmarkParallelIncludes benchmarks parallel ESI include processing (now default)

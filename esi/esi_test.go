@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/darkweak/go-esi/esi"
+	"github.com/sc0rp10/go-esi/esi"
 )
 
 func loadFromFixtures(name string) []byte {
@@ -33,17 +33,17 @@ var expected = map[string]string{
 	"full.html": `<html>
     <head>
         <title>Hello from domain.com:9080</title>
-        
+
     </head>
     <body>
         <esi:include src="domain.com:9080/not-interpreted"/>
         <h1>CHAINED 2</h1>
         <h1>ALTERNATE ESI INCLUDE</h1>
-         
+
                 <div>
                     <h1>ESI INCLUDE</h1>
                 </div>
-            
+
     </body>
 </html>
 `,
@@ -153,14 +153,14 @@ const full = `<html>
 	-->
 	<esi:include src="/chained-esi-include-1" />
 	<esi:include src="http://inexistent.abc/something" alt="//domain.com:9080/alt-esi-include" onerror="continue" />
-	<esi:choose> 
-		<esi:when test="$(HTTP_COOKIE{group})=='Advanced'"> 
+	<esi:choose>
+		<esi:when test="$(HTTP_COOKIE{group})=='Advanced'">
 			<span><esi:include src="http://domain.com:9080/chained-esi-include-1"/></span>
-		</esi:when> 
+		</esi:when>
 		<esi:when test="$(HTTP_COOKIE{group})=='Basic User'">
 			<esi:include src="https://google.com"/>
-		</esi:when> 
-		<esi:otherwise> 
+		</esi:when>
+		<esi:otherwise>
 			<div>
 				<esi:include src="http://domain.com:9080/esi-include"/>
 			</div>

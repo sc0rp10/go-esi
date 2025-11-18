@@ -1,7 +1,7 @@
-module github.com/darkweak/go-esi
+module github.com/sc0rp10/go-esi
 
-go 1.19
+go 1.25
 
 require go.uber.org/zap v1.27.0
 
-require go.uber.org/multierr v1.10.0 // indirect
+require go.uber.org/multierr v1.11.0 // indirect

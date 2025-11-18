@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"net/http"
 
-	"github.com/darkweak/go-esi/esi"
+	"github.com/sc0rp10/go-esi/esi"
 	"go.uber.org/zap"
 )
 

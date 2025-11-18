@@ -7,13 +7,13 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/darkweak/go-esi/esi"
+	"github.com/sc0rp10/go-esi/esi"
 )
 
 const expected = `<html>
     <head>
         <title>Hello from domain.com:81</title>
-        
+
     </head>
     <body>
         <esi:include src="domain.com/not-interpreted"/>
