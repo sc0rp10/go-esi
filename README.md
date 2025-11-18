@@ -80,8 +80,14 @@ func functionToParseESITags(b []byte, r *http.Request) []byte {
 
 ### Caddy middleware
 ```bash
-xcaddy build --with github.com/sc0rp10/go-esi/middleware/caddy
+xcaddy build --with github.com/sc0rp10/go-esi
 ```
+
+Or with a specific version:
+```bash
+xcaddy build --with github.com/sc0rp10/go-esi@v1.0.0
+```
+
 Refer to the [sample Caddyfile](https://github.com/sc0rp10/go-esi/blob/master/middleware/caddy/Caddyfile) to know how to use that.
 
 ### Examples

@@ -24,6 +24,7 @@ This fork was created to:
 
 - **Fixed WriteHeader bug:** Status codes are now properly preserved through the response writer wrapper (see `writer/writer.go`)
 - **Updated module path:** Changed from `github.com/darkweak/go-esi` to `github.com/sc0rp10/go-esi`
+- **Unified module structure:** Merged Caddy middleware into root module for simpler dependency management
 - **Added comprehensive tests:** Includes tests to prevent regression of the status code bug
 - **Updated dependencies:** Go 1.25 and latest stable versions of all dependencies
 - **Streamlined middlewares:** Removed Traefik and Roadrunner middlewares, focus on Caddy integration
