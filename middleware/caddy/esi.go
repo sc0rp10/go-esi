@@ -3,6 +3,7 @@ package caddy_esi
 import (
 	"bytes"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/caddyserver/caddy/v2"
@@ -61,6 +62,19 @@ func (e *ESI) ServeHTTP(rw http.ResponseWriter, r *http.Request, next caddyhttp.
 			return false
 		}
 
+		// Don't buffer if Transfer-Encoding is chunked (streaming response)
+		if header.Get("Transfer-Encoding") == "chunked" {
+			return false
+		}
+
+		// Don't buffer very small responses (< 512 bytes) - unlikely to have ESI
+		if cl := header.Get("Content-Length"); cl != "" {
+			if size, err := strconv.Atoi(cl); err == nil && size < 512 {
+				return false
+			}
+		}
+
+		// Only buffer HTML/XHTML content types
 		ct := header.Get("Content-Type")
 		return ct != "" && (bytes.Contains([]byte(ct), []byte("text/html")) ||
 			bytes.Contains([]byte(ct), []byte("application/xhtml+xml")))
