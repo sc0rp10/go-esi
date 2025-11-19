@@ -3,7 +3,9 @@ package caddy_esi
 import (
 	"bytes"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/caddyserver/caddy/v2"
@@ -14,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sc0rp10/go-esi/esi"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var bufPool *sync.Pool = &sync.Pool{
@@ -132,7 +135,23 @@ func (e *ESI) ServeHTTP(rw http.ResponseWriter, r *http.Request, next caddyhttp.
 // Provision implements caddy.Provisioner
 func (e *ESI) Provision(ctx caddy.Context) error {
 	e.logger = ctx.Logger()
+
+	// Check environment variable for debug logging
+	if isDebugEnabled() {
+		// Create debug-level logger
+		config := zap.NewProductionConfig()
+		config.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+		debugLogger, err := config.Build()
+		if err == nil {
+			e.logger = debugLogger
+			e.logger.Info("ESI debug logging enabled via ESI_DEBUG environment variable")
+		}
+	}
+
 	e.logger.Info("ESI middleware enabled with buffered processing")
+
+	// Pass logger to ESI package for cache logging
+	esi.SetLogger(e.logger)
 
 	// Initialize Prometheus metrics if registry is available
 	if reg := ctx.GetMetricsRegistry(); reg != nil {
@@ -143,6 +162,18 @@ func (e *ESI) Provision(ctx caddy.Context) error {
 	}
 
 	return nil
+}
+
+// isDebugEnabled checks environment variable for debug mode
+func isDebugEnabled() bool {
+	debugEnv := os.Getenv("ESI_DEBUG")
+	if debugEnv == "" {
+		return false
+	}
+
+	// Accept: "1", "true", "TRUE", "yes", "YES"
+	debugEnv = strings.ToLower(strings.TrimSpace(debugEnv))
+	return debugEnv == "1" || debugEnv == "true" || debugEnv == "yes"
 }
 
 // OnCacheHit implements esi.MetricsObserver
