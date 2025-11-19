@@ -82,6 +82,7 @@ func (e *ESI) ServeHTTP(rw http.ResponseWriter, r *http.Request, next caddyhttp.
 
 	// Create recorder to buffer the response
 	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
 	defer bufPool.Put(buf)
 
 	recorder := caddyhttp.NewResponseRecorder(rw, buf, shouldBuffer)

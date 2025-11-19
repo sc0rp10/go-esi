@@ -57,6 +57,7 @@ func SetMetricsObserver(observer MetricsObserver) {
 }
 
 // Get retrieves a cached fragment if it exists and is not expired
+// Note: This is a low-level function. Metrics are recorded by GetOrFetch, not here.
 func (c *fragmentCache) Get(url string) ([]byte, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -65,9 +66,6 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 	if !ok {
 		if logger != nil {
 			logger.Info("Cache Get: not found", zap.String("url", url))
-		}
-		if metricsObserver != nil {
-			metricsObserver.OnCacheMiss()
 		}
 		return nil, false
 	}
@@ -82,9 +80,6 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 				zap.Time("expired_at", entry.expiresAt),
 				zap.Time("now", now))
 		}
-		if metricsObserver != nil {
-			metricsObserver.OnCacheMiss()
-		}
 		return nil, false
 	}
 
@@ -97,9 +92,6 @@ func (c *fragmentCache) Get(url string) ([]byte, bool) {
 			zap.Time("expires_at", entry.expiresAt))
 	}
 
-	if metricsObserver != nil {
-		metricsObserver.OnCacheHit()
-	}
 	return entry.data, true
 }
 
@@ -111,6 +103,10 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 	if cached, ok := c.Get(url); ok {
 		if logger != nil {
 			logger.Info("ESI include cache hit", zap.String("url", url))
+		}
+		// Record cache hit metric
+		if metricsObserver != nil {
+			metricsObserver.OnCacheHit()
 		}
 		return cached, nil
 	}
@@ -129,6 +125,12 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 		}
 		req.wg.Wait()
 
+		// After waiting, the result is now available (either in cache or as error)
+		// This counts as a cache hit since we didn't fetch ourselves
+		if req.err == nil && metricsObserver != nil {
+			metricsObserver.OnCacheHit()
+		}
+
 		// Return the shared result from the fetcher
 		return req.result, req.err
 	}
@@ -142,6 +144,11 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 
 	if logger != nil {
 		logger.Info("ESI include cache miss, fetching", zap.String("url", url))
+	}
+
+	// Record cache miss metric (we're fetching from backend)
+	if metricsObserver != nil {
+		metricsObserver.OnCacheMiss()
 	}
 
 	// Call the fetch function
