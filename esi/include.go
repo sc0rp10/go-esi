@@ -118,7 +118,8 @@ func (i *includeTag) Process(b []byte, req *http.Request) ([]byte, int) {
 		return nil, len(b)
 	}
 
-	cacheKey := sanitizeURL(i.src, req.URL)
+	// Resolve fragment URL (uses configured base_url if set)
+	cacheKey := resolveFragmentURL(i.src, req.URL)
 	startTime := time.Now()
 
 	// Use GetOrFetch to prevent cache stampede
@@ -126,6 +127,12 @@ func (i *includeTag) Process(b []byte, req *http.Request) ([]byte, int) {
 		// Fetch the main URL
 		rq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, cacheKey, nil)
 		addHeaders(headersSafe, req, rq)
+
+		// Add custom headers if configured
+		customHeaders := getCustomHeaders()
+		if len(customHeaders) > 0 {
+			addHeaders(customHeaders, req, rq)
+		}
 
 		if rq.URL.Scheme == req.URL.Scheme && rq.URL.Host == req.URL.Host {
 			addHeaders(headersUnsafe, req, rq)
@@ -208,13 +215,20 @@ func (i *includeTag) FetchContent(b []byte, req *http.Request) []byte {
 		return nil
 	}
 
-	cacheKey := sanitizeURL(i.src, req.URL)
+	// Resolve fragment URL (uses configured base_url if set)
+	cacheKey := resolveFragmentURL(i.src, req.URL)
 
 	// Use GetOrFetch to prevent cache stampede
 	result, err := cache.GetOrFetch(cacheKey, func() ([]byte, *http.Response, error) {
 		// Fetch the main URL
 		rq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, cacheKey, nil)
 		addHeaders(headersSafe, req, rq)
+
+		// Add custom headers if configured
+		customHeaders := getCustomHeaders()
+		if len(customHeaders) > 0 {
+			addHeaders(customHeaders, req, rq)
+		}
 
 		if rq.URL.Scheme == req.URL.Scheme && rq.URL.Host == req.URL.Host {
 			addHeaders(headersUnsafe, req, rq)

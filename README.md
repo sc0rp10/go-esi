@@ -79,16 +79,80 @@ func functionToParseESITags(b []byte, r *http.Request) []byte {
 - [x] Caddy
 
 ### Caddy middleware
+
+#### Installation
+
 ```bash
 xcaddy build --with github.com/sc0rp10/go-esi
 ```
 
 Or with a specific version:
 ```bash
-xcaddy build --with github.com/sc0rp10/go-esi@v1.0.0
+xcaddy build --with github.com/sc0rp10/go-esi@v1.3.0
 ```
 
-Refer to the [sample Caddyfile](https://github.com/sc0rp10/go-esi/blob/master/middleware/caddy/Caddyfile) to know how to use that.
+#### Basic Configuration
+
+```caddyfile
+example.com {
+    esi
+    reverse_proxy localhost:9000
+}
+```
+
+#### Advanced Configuration
+
+The ESI middleware supports several configuration options:
+
+```caddyfile
+example.com {
+    esi {
+        # Minimum cache TTL in seconds (default: 300)
+        # Overrides upstream Cache-Control headers if they specify a lower value
+        minimum_cache_ttl 600
+
+        # Cache TTL jitter in seconds (default: 0)
+        # Adds random 0-N seconds to TTL to prevent cache stampede
+        cache_ttl_jitter 60
+
+        # Base URL for ESI fragment requests (default: use request URL)
+        # Use this to fetch fragments from internal backend, bypassing CDN/WAF
+        esi_base_url http://localhost:9000
+
+        # Additional headers to forward to fragment requests (default: none)
+        # In addition to safe headers (Accept, Accept-Language)
+        esi_headers X-Real-IP X-Forwarded-For X-Request-ID
+    }
+
+    reverse_proxy localhost:9000
+}
+```
+
+**Configuration Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `minimum_cache_ttl` | int | 300 | Minimum cache TTL in seconds, overrides low upstream values |
+| `cache_ttl_jitter` | int | 0 | Random jitter (0-N seconds) added to TTL to spread cache expirations |
+| `esi_base_url` | string | "" | Base URL for fragment requests (e.g., `http://localhost:9000`) to bypass CDN/WAF |
+| `esi_headers` | []string | [] | Additional HTTP headers to forward to fragment requests |
+
+**Common Use Case - Bypassing WAF/CDN:**
+
+If your ESI fragments are blocked by Cloudflare or WAF rules when making external requests, use `esi_base_url` to fetch them from an internal endpoint:
+
+```caddyfile
+example.com {
+    esi {
+        # Fragments will use http://localhost:9000/_fragment instead of
+        # https://example.com/_fragment (which would go through external network)
+        esi_base_url http://localhost:9000
+    }
+    reverse_proxy localhost:9000
+}
+```
+
+Refer to the [sample Caddyfile](https://github.com/sc0rp10/go-esi/blob/master/middleware/caddy/Caddyfile) for more examples.
 
 ### Examples
 

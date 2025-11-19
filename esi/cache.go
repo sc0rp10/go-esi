@@ -176,6 +176,14 @@ func (c *fragmentCache) GetOrFetch(url string, fetchFn func() ([]byte, *http.Res
 // Put stores a fragment in cache with TTL parsed from response headers
 func (c *fragmentCache) Put(url string, data []byte, resp *http.Response) {
 	ttl := parseTTL(resp)
+
+	// Apply minimum TTL if configured
+	if globalConfig.MinimumCacheTTL > 0 && ttl < globalConfig.MinimumCacheTTL {
+		ttl = globalConfig.MinimumCacheTTL
+	}
+
+	// Apply TTL jitter if configured
+	ttl = applyTTLJitter(ttl)
 	if logger != nil {
 		cacheControl := ""
 		if resp != nil {

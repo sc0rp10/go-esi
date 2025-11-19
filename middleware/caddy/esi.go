@@ -30,13 +30,66 @@ func init() {
 	httpcaddyfile.RegisterGlobalOption("esi", func(h *caddyfile.Dispenser, _ interface{}) (interface{}, error) {
 		return &ESI{}, nil
 	})
-	httpcaddyfile.RegisterHandlerDirective("esi", func(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
-		return &ESI{}, nil
-	})
+	httpcaddyfile.RegisterHandlerDirective("esi", parseCaddyfileHandlerDirective)
+}
+
+// parseCaddyfileHandlerDirective parses the ESI directive from Caddyfile
+func parseCaddyfileHandlerDirective(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
+	e := &ESI{}
+	err := e.UnmarshalCaddyfile(h.Dispenser)
+	return e, err
+}
+
+// UnmarshalCaddyfile implements caddyfile.Unmarshaler
+func (e *ESI) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	for d.Next() {
+		for d.NextBlock(0) {
+			switch d.Val() {
+			case "minimum_cache_ttl":
+				var ttlStr string
+				if !d.Args(&ttlStr) {
+					return d.ArgErr()
+				}
+				ttl, err := strconv.Atoi(ttlStr)
+				if err != nil {
+					return d.Errf("invalid minimum_cache_ttl: %v", err)
+				}
+				e.MinimumCacheTTL = ttl
+			case "cache_ttl_jitter":
+				var jitterStr string
+				if !d.Args(&jitterStr) {
+					return d.ArgErr()
+				}
+				jitter, err := strconv.Atoi(jitterStr)
+				if err != nil {
+					return d.Errf("invalid cache_ttl_jitter: %v", err)
+				}
+				e.CacheTTLJitter = jitter
+			case "esi_base_url":
+				if !d.Args(&e.ESIBaseURL) {
+					return d.ArgErr()
+				}
+			case "esi_headers":
+				e.ESIHeaders = d.RemainingArgs()
+				if len(e.ESIHeaders) == 0 {
+					return d.Err("esi_headers requires at least one header name")
+				}
+			default:
+				return d.Errf("unknown subdirective: %s", d.Val())
+			}
+		}
+	}
+	return nil
 }
 
 // ESI to handle, process and serve ESI tags.
 type ESI struct {
+	// Configuration
+	MinimumCacheTTL int      `json:"minimum_cache_ttl,omitempty"`
+	CacheTTLJitter  int      `json:"cache_ttl_jitter,omitempty"`
+	ESIBaseURL      string   `json:"esi_base_url,omitempty"`
+	ESIHeaders      []string `json:"esi_headers,omitempty"`
+
 	logger *zap.Logger
 
 	// Prometheus metrics
@@ -152,6 +205,21 @@ func (e *ESI) Provision(ctx caddy.Context) error {
 
 	// Pass logger to ESI package for cache logging
 	esi.SetLogger(e.logger)
+
+	// Configure ESI package with user settings
+	config := esi.Config{
+		MinimumCacheTTL: e.MinimumCacheTTL,
+		CacheTTLJitter:  e.CacheTTLJitter,
+		BaseURL:         e.ESIBaseURL,
+		Headers:         e.ESIHeaders,
+	}
+	esi.Configure(config)
+
+	e.logger.Info("ESI configuration applied",
+		zap.Int("minimum_cache_ttl", e.MinimumCacheTTL),
+		zap.Int("cache_ttl_jitter", e.CacheTTLJitter),
+		zap.String("esi_base_url", e.ESIBaseURL),
+		zap.Strings("esi_headers", e.ESIHeaders))
 
 	// Initialize Prometheus metrics if registry is available
 	if reg := ctx.GetMetricsRegistry(); reg != nil {
