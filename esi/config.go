@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -114,6 +115,12 @@ func getCustomHeaders() map[string]string {
 // setCustomHeaders sets configured custom headers on the request
 func setCustomHeaders(req *http.Request) {
 	for name, value := range globalConfig.Headers {
-		req.Header.Set(name, value)
+		// Special handling for Host header
+		// Go's HTTP client uses req.Host instead of req.Header["Host"]
+		if strings.EqualFold(name, "Host") {
+			req.Host = value
+		} else {
+			req.Header.Set(name, value)
+		}
 	}
 }

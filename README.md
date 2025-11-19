@@ -126,6 +126,9 @@ example.com {
         # Set custom headers on fragment requests (like proxy_set_header)
         esi_set_header X-Backend-Server "internal"
         esi_set_header X-Request-Source "esi"
+
+        # Special: Override Host header (useful with esi_base_url)
+        # esi_set_header Host "example.com"
     }
 
     reverse_proxy localhost:9000
