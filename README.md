@@ -107,6 +107,10 @@ The ESI middleware supports several configuration options:
 ```caddyfile
 example.com {
     esi {
+        # Enable debug logging (default: off)
+        # Use: debug on|off or debug {$ENV_VAR}
+        debug on
+
         # Minimum cache TTL in seconds (default: 300)
         # Overrides upstream Cache-Control headers if they specify a lower value
         minimum_cache_ttl 600
@@ -119,9 +123,9 @@ example.com {
         # Use this to fetch fragments from internal backend, bypassing CDN/WAF
         esi_base_url http://localhost:9000
 
-        # Additional headers to forward to fragment requests (default: none)
-        # In addition to safe headers (Accept, Accept-Language)
-        esi_headers X-Real-IP X-Forwarded-For X-Request-ID
+        # Set custom headers on fragment requests (like proxy_set_header)
+        esi_set_header X-Backend-Server "internal"
+        esi_set_header X-Request-Source "esi"
     }
 
     reverse_proxy localhost:9000
@@ -132,10 +136,11 @@ example.com {
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
+| `debug` | on/off | off | Enable debug logging (supports env vars: `debug {$ESI_DEBUG}`) |
 | `minimum_cache_ttl` | int | 300 | Minimum cache TTL in seconds, overrides low upstream values |
 | `cache_ttl_jitter` | int | 0 | Random jitter (0-N seconds) added to TTL to spread cache expirations |
 | `esi_base_url` | string | "" | Base URL for fragment requests (e.g., `http://localhost:9000`) to bypass CDN/WAF |
-| `esi_headers` | []string | [] | Additional HTTP headers to forward to fragment requests |
+| `esi_set_header` | repeatable | - | Set a custom header on fragment requests (name value) |
 
 **Common Use Case - Bypassing WAF/CDN:**
 

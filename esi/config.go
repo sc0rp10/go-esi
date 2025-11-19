@@ -2,6 +2,7 @@ package esi
 
 import (
 	"math/rand"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -24,9 +25,10 @@ type Config struct {
 	// endpoint that bypasses CDN/WAF rules.
 	BaseURL string
 
-	// Headers is a list of additional header names to forward to fragment requests
-	// These are in addition to the default safe headers (Accept, Accept-Language, etc.)
-	Headers []string
+	// Headers is a map of custom headers to set on fragment requests (like proxy_set_header)
+	// Example: {"X-Backend-Server": "internal", "X-Request-Source": "esi"}
+	// These headers are set with the specified values on every fragment request
+	Headers map[string]string
 }
 
 var (
@@ -48,7 +50,7 @@ func Configure(cfg Config) {
 			zap.Int("minimum_cache_ttl", globalConfig.MinimumCacheTTL),
 			zap.Int("cache_ttl_jitter", globalConfig.CacheTTLJitter),
 			zap.String("base_url", globalConfig.BaseURL),
-			zap.Strings("headers", globalConfig.Headers))
+			zap.Any("headers", globalConfig.Headers))
 	}
 }
 
@@ -104,7 +106,14 @@ func applyTTLJitter(ttl int) int {
 	return ttl + jitter
 }
 
-// getCustomHeaders returns the list of custom headers to forward
-func getCustomHeaders() []string {
+// getCustomHeaders returns the map of custom headers to set on requests
+func getCustomHeaders() map[string]string {
 	return globalConfig.Headers
+}
+
+// setCustomHeaders sets configured custom headers on the request
+func setCustomHeaders(req *http.Request) {
+	for name, value := range globalConfig.Headers {
+		req.Header.Set(name, value)
+	}
 }

@@ -69,11 +69,38 @@ func (e *ESI) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if !d.Args(&e.ESIBaseURL) {
 					return d.ArgErr()
 				}
-			case "esi_headers":
-				e.ESIHeaders = d.RemainingArgs()
-				if len(e.ESIHeaders) == 0 {
-					return d.Err("esi_headers requires at least one header name")
+			case "debug":
+				// Enable or disable debug logging
+				// Format: debug on|off or debug {$ENV_VAR}
+				var debugValue string
+				if !d.Args(&debugValue) {
+					return d.ArgErr()
 				}
+
+				// Accept: "on", "true", "1", "yes" for true
+				// Accept: "off", "false", "0", "no" for false
+				debugLower := strings.ToLower(strings.TrimSpace(debugValue))
+				switch debugLower {
+				case "on", "true", "1", "yes":
+					e.Debug = true
+				case "off", "false", "0", "no":
+					e.Debug = false
+				default:
+					return d.Errf("debug must be 'on' or 'off', got: %s", debugValue)
+				}
+			case "esi_set_header":
+				// Set a custom header on ESI fragment requests (repeatable directive)
+				// Format: esi_set_header X-Backend-Server "internal-server"
+				if e.ESIHeaders == nil {
+					e.ESIHeaders = make(map[string]string)
+				}
+
+				var headerName, headerValue string
+				if !d.Args(&headerName, &headerValue) {
+					return d.Err("esi_set_header requires header name and value")
+				}
+
+				e.ESIHeaders[headerName] = headerValue
 			default:
 				return d.Errf("unknown subdirective: %s", d.Val())
 			}
@@ -85,10 +112,11 @@ func (e *ESI) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 // ESI to handle, process and serve ESI tags.
 type ESI struct {
 	// Configuration
-	MinimumCacheTTL int      `json:"minimum_cache_ttl,omitempty"`
-	CacheTTLJitter  int      `json:"cache_ttl_jitter,omitempty"`
-	ESIBaseURL      string   `json:"esi_base_url,omitempty"`
-	ESIHeaders      []string `json:"esi_headers,omitempty"`
+	MinimumCacheTTL int               `json:"minimum_cache_ttl,omitempty"`
+	CacheTTLJitter  int               `json:"cache_ttl_jitter,omitempty"`
+	ESIBaseURL      string            `json:"esi_base_url,omitempty"`
+	ESIHeaders      map[string]string `json:"esi_headers,omitempty"`
+	Debug           bool              `json:"debug,omitempty"`
 
 	logger *zap.Logger
 
@@ -219,7 +247,7 @@ func (e *ESI) Provision(ctx caddy.Context) error {
 		zap.Int("minimum_cache_ttl", e.MinimumCacheTTL),
 		zap.Int("cache_ttl_jitter", e.CacheTTLJitter),
 		zap.String("esi_base_url", e.ESIBaseURL),
-		zap.Strings("esi_headers", e.ESIHeaders))
+		zap.Any("esi_headers", e.ESIHeaders))
 
 	// Initialize Prometheus metrics if registry is available
 	if reg := ctx.GetMetricsRegistry(); reg != nil {

@@ -128,11 +128,8 @@ func (i *includeTag) Process(b []byte, req *http.Request) ([]byte, int) {
 		rq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, cacheKey, nil)
 		addHeaders(headersSafe, req, rq)
 
-		// Add custom headers if configured
-		customHeaders := getCustomHeaders()
-		if len(customHeaders) > 0 {
-			addHeaders(customHeaders, req, rq)
-		}
+		// Set custom headers if configured (like proxy_set_header)
+		setCustomHeaders(rq)
 
 		if rq.URL.Scheme == req.URL.Scheme && rq.URL.Host == req.URL.Host {
 			addHeaders(headersUnsafe, req, rq)
@@ -224,11 +221,8 @@ func (i *includeTag) FetchContent(b []byte, req *http.Request) []byte {
 		rq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, cacheKey, nil)
 		addHeaders(headersSafe, req, rq)
 
-		// Add custom headers if configured
-		customHeaders := getCustomHeaders()
-		if len(customHeaders) > 0 {
-			addHeaders(customHeaders, req, rq)
-		}
+		// Set custom headers if configured (like proxy_set_header)
+		setCustomHeaders(rq)
 
 		if rq.URL.Scheme == req.URL.Scheme && rq.URL.Host == req.URL.Host {
 			addHeaders(headersUnsafe, req, rq)
